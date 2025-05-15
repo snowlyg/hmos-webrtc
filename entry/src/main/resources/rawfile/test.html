@@ -1,0 +1,1226 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>远程探视</title>
+    <meta name="format-detection" content="telephone=no" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-touch-fullscreen" content="yes" />
+    <link rel="stylesheet" type="text/css" href="https://rtc.chindeo.com/rtc/css/loaders.min.css" />
+    <link rel="stylesheet" type="text/css" href="https://rtc.chindeo.com/rtc/css/style.css" />
+    <script src="https://rtc.chindeo.com/rtc/js/vue.js"></script>
+    <script src="https://rtc.chindeo.com/rtc/js/wcPop.js"></script>
+    <script src="https://rtc.chindeo.com/rtc/js/codex.js"></script>
+    <script src="https://rtc.chindeo.com/rtc/js/timer.js"></script>
+    <script src="https://rtc.chindeo.com/rtc/js/reconnecting-websocket.min.js"></script>
+    <script src="https://rtc.chindeo.com/rtc/js/jweixin-1.3.2.js"></script>
+  </head>
+
+  <body>
+    <div id="app" style="display: none">
+      <div v-show="dialogVisible">
+        <div class="van-overlay" style="z-index: 2008"></div>
+        <div role="dialog" class="van-dialog" style="z-index: 2009">
+          <div class="van-dialog__content van-dialog__content--isolated">
+            <div class="van-dialog__message">确认退出聊天吗？</div>
+          </div>
+          <div class="van-hairline-top van-dialog__footer">
+            <button
+              class="van-button van-button--default van-button--large van-dialog__cancel"
+              @click="submit('0')"
+            >
+              <div class="van-button__content">
+                <span class="van-button__text">取消</span>
+              </div>
+            </button>
+            <button
+              class="van-button van-button--default van-button--large van-dialog__confirm van-hairline-left"
+              @click="submit('1')"
+            >
+              <div class="van-button__content">
+                <span class="van-button__text">确认</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div v-if="!isCall">
+        <div class="videoImg">
+          <img src="https://rtc.chindeo.com/rtc/images/video.jpg" />
+        </div>
+        <div v-if="noSupport">
+          <div class="wsStatus">
+            <span>v{{ version }} 连接状态</span>
+            <span class="wsStatus_i" :style="{color: isClient ? 'green' : 'red'}">
+              {{ isClient ? '正常' : '失败' }}
+            </span>
+          </div>
+          <div class="border1"></div>
+          <div class="list_view" v-if="remoteDeviceDetail">
+            <div class="list_item">
+              <span>{{ remoteDeviceDetail.dev_desc }}</span>
+            </div>
+            <div class="list_item">
+              <span>{{ remoteDeviceDetail.name }}</span>
+            </div>
+            <div class="list_item">
+              <span>{{ remoteDeviceDetail.adm_in_pat_no }}</span>
+            </div>
+          </div>
+          <div class="list_view" v-if="remoteDeviceDetail">
+            <div class="list_item">
+              <span>探视结束时间：{{ remoteDeviceDetail.end_at }}</span>
+            </div>
+          </div>
+          <div class="remoteNumber">
+            <input v-model="remoteNumber" @input="remoteNumberInput" placeholder="对方号码" />
+          </div>
+          <button class="buttonStart" @click="start">拨打</button>
+        </div>
+        <div v-else>
+          <div class="tips">
+            *v{{ version }}应用内不支持，请点击下方按钮复制链接打开默认浏览器使用
+          </div>
+          <div>
+            <button class="buttonCopy" @click="copy">点我复制</button>
+            <input type="text" :value="locationHref" id="code" />
+          </div>
+        </div>
+      </div>
+      <div v-else>
+        <div class="callView">
+          <div class="callView_content" v-if="!callIng">
+            <div class="content_nurse">
+              <img src="https://rtc.chindeo.com/rtc/images/img_nurse.png" />
+            </div>
+            <div class="content_loc" v-if="remoteDeviceDetail">
+              <span>{{ remoteDeviceDetail.loc_name }}</span>
+            </div>
+            <div class="content_tips">
+              <span>正在等待对方接收邀请...</span>
+            </div>
+          </div>
+          <div v-else>
+            <div v-if="ackIdArray.filter(i => i.isCalling).length < 2">
+              <video class="localVideo" ref="localVideo" autoplay muted playsinline></video>
+              <div class="remoteVideos">
+                <video
+                  class="remote"
+                  v-if="ackIdArray[0].isCalling"
+                  v-show="ackIdArray[0].isCallView"
+                  ref="receiveVideo0"
+                  autoplay
+                  playsinline
+                ></video>
+                <div class="remoteVideos_displayName">
+                  <span>{{ ackIdArray[0].displayName }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-else>
+              <div class="remote-one">
+                <div class="receiveVideo0">
+                  <video
+                    v-if="ackIdArray[0].isCalling"
+                    v-show="ackIdArray[0].isCallView"
+                    ref="receiveVideo0"
+                    autoplay
+                    playsinline
+                  ></video>
+                  <div class="remoteVideos_displayName">
+                    <span>{{ ackIdArray[0].displayName }}</span>
+                  </div>
+                </div>
+                <div class="_localVideo">
+                  <video ref="localVideo" autoplay muted playsinline></video>
+                  <div class="remoteVideos_displayName">
+                    <span>家属（我）</span>
+                  </div>
+                </div>
+              </div>
+              <div class="remote-two">
+                <div class="receiveVideo1">
+                  <video
+                    v-if="ackIdArray[1].isCalling"
+                    v-show="ackIdArray[1].isCallView"
+                    ref="receiveVideo1"
+                    autoplay
+                    playsinline
+                  ></video>
+                  <div class="remoteVideos_displayName">
+                    <span>{{ ackIdArray[1].displayName }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="interposeVideo" style="display: none">
+              <video
+                v-for="(item, index) in interposeArray"
+                :key="index"
+                :ref="'receiveInterposeVideo' + index"
+                autoplay
+                playsinline
+                style="width: 0px; height: 0px; display: none"
+              ></video>
+            </div>
+          </div>
+          <transition name="fade">
+            <div class="callEnd" v-show="isShowCallEnd">
+              <div class="callEnd_timer">
+                <span>{{ timerNumber }}</span>
+              </div>
+              <img
+                class="icon_refuse"
+                @click="dialogVisible = true;"
+                src="https://rtc.chindeo.com/rtc/images/icon_refuse.png"
+              />
+              <div class="callEnd_txt">
+                <span>取消</span>
+              </div>
+            </div>
+          </transition>
+        </div>
+      </div>
+    </div>
+    <script>
+      function debounce(func, delay) {
+        let timeout
+        return function () {
+          // console.log('清除', timeout, e.target.value)
+          clearTimeout(timeout)
+          const context = this
+          const args = arguments
+          // console.log('新的', timeout, e.target.value)
+          timeout = setTimeout(function () {
+            func.apply(context, args)
+          }, delay)
+        }
+      }
+      var app = new Vue({
+        el: '#app',
+        data: {
+          version: '1.1.2',
+          dialogVisible: false,
+          pc_config: {
+            iceServers: [
+              {
+                urls: ['stun:47.112.22.152:3478']
+              },
+              {
+                username: 'Chindeo',
+                credential: 'P@ssw0rd',
+                urls: ['turn:47.112.22.152:3478?transport=udp']
+              },
+              {
+                username: 'Chindeo',
+                credential: 'P@ssw0rd',
+                urls: ['turn:47.112.22.152:3478?transport=tcp']
+              }
+            ]
+          },
+          senderPc: null,
+          ws: null,
+          remoteNumber: '',
+          transferNumber: '',
+          ackIdArray: [],
+          interposeArray: [],
+          chatId: null,
+          localStream: null,
+          remoteDeviceDetail: null,
+          isClient: false,
+          isCall: false,
+          callIng: false,
+          isAuth: false,
+          noSupport: false,
+          videoStartBitrateKbps: 2384,
+          videoMinBitrateKbps: 2384,
+          videoMaxBitrateKbps: 2384,
+          audioStartBitrate: 128,
+          audioStereo: 0,
+          locationHref: '',
+          uuid: null,
+          toNumber: null,
+          interposeId: null,
+          isLock: false,
+          timerNumber: null,
+          type: 'applet',
+          isShowCallEnd: false,
+          timer: null,
+          domain: 'rtc.chindeo.com',
+          protocol: 'ws'
+        },
+        methods: {
+          startTimer() {
+            this.timer = new Timer('0')
+            this.timer.start((time) => {
+              this.timerNumber = time
+            })
+          },
+          submit(val) {
+            this.dialogVisible = false
+            if (val === '1') {
+              this.callEnd()
+            }
+          },
+          remoteNumberInput(event) {
+            this.remoteNumber = event.target.value
+          },
+          msgContext(msg) {
+            wcPop({
+              content: msg,
+              shade: true,
+              style:
+                'background: rgba(17,17,17,.7); color: #fff; border-radius: 10px; padding: 5px;',
+              time: 1
+            })
+          },
+          GetQueryString(name) {
+            const reg = new RegExp('(^|&)' + name + '=([^&]*)(&|$)')
+            const r = window.location.search.substr(1).match(reg)
+            if (r != null) return unescape(r[2])
+            return null
+          },
+          copy() {
+            const input = document.getElementById('code')
+            input.select()
+            document.execCommand('Copy')
+            this.msgContext('复制成功')
+          },
+          callEnd() {
+            this.isLock = true
+            const _acks = []
+            for (let item of this.ackIdArray) {
+              _acks.push({
+                from: item.from,
+                fromId: item.fromId,
+                isCalling: item.isCalling,
+                isCallView: true
+              })
+            }
+            const sendNotice = {
+              eventName: '__notice',
+              data: {
+                ackIdArray: _acks,
+                noticeIndex: '0',
+                type: 'call_end'
+              }
+            }
+            this.ws.send(JSON.stringify(sendNotice))
+          },
+          start() {
+            if (this.isAuth) {
+              if (this.remoteDeviceDetail) {
+                if (new Date() > new Date(this.remoteDeviceDetail.end_at.replace(/\-/g, '/'))) {
+                  setTimeout(() => {
+                    wx.miniProgram.navigateBack()
+                  }, 2000)
+                  return this.msgContext('探视时间已结束')
+                }
+              }
+              this.toNumber = this.remoteNumber
+              const noticeInvite = {
+                eventName: '__notice_invite',
+                data: {
+                  to: this.remoteNumber
+                }
+              }
+              this.ws.send(JSON.stringify(noticeInvite))
+              this.isLock = false
+              setTimeout(() => {
+                this.isShowCallEnd = true
+              }, 10)
+              this.showCallEndTimeout = setTimeout(() => {
+                this.isShowCallEnd = false
+              }, 10000)
+            } else {
+              this.msgContext('没有权限')
+            }
+          },
+          dialPeer() {
+            this.isCall = true
+            const invite = {
+              eventName: '__invite',
+              data: {
+                to: this.toNumber,
+                videoEnable: 1,
+                isTransfer: false,
+                deviceType: this.type,
+                transferNumber: this.transferNumber
+              }
+            }
+            if (this.remoteDeviceDetail) {
+              invite.data.transferName =
+                this.remoteDeviceDetail.dev_desc + this.remoteDeviceDetail.name
+            }
+            this.ws.send(JSON.stringify(invite))
+          },
+          async handleReceiverAnswer(data) {
+            const index = this.ackIdArray.findIndex((item) => item.fromId === data.macId)
+            if (index !== -1) {
+              this.ackIdArray[index].isCalling = true
+              if (!this.timerNumber) {
+                this.startTimer()
+              }
+              setTimeout(() => {
+                if (this.ackIdArray.filter((i) => i.isCalling).length > 1) {
+                  this.resetVideo()
+                }
+              })
+              await this.ackIdArray[index].receivePC.setRemoteDescription({
+                sdp: data.sdp,
+                type: 'answer'
+              })
+            } else {
+              const _index = this.interposeArray.findIndex((item) => item.fromId === data.macId)
+              if (_index !== -1) {
+                await this.interposeArray[_index].receivePC.setRemoteDescription({
+                  sdp: data.sdp,
+                  type: 'answer'
+                })
+              }
+            }
+          },
+          async handleReceiverRemoteCandidate(data) {
+            const index = this.ackIdArray.findIndex((item) => item.fromId === data.macId)
+            if (index !== -1) {
+              const candidate = {
+                candidate: data.candidate,
+                sdpMLineIndex: data.label,
+                sdpMid: data.sdpMid
+              }
+              await this.ackIdArray[index].receivePC.addIceCandidate(new RTCIceCandidate(candidate))
+            } else {
+              const _index = this.interposeArray.findIndex((item) => item.fromId === data.macId)
+              if (_index !== -1) {
+                const candidate = {
+                  candidate: data.candidate,
+                  sdpMLineIndex: data.label,
+                  sdpMid: data.sdpMid
+                }
+                await this.interposeArray[_index].receivePC.addIceCandidate(
+                  new RTCIceCandidate(candidate)
+                )
+              }
+            }
+          },
+          async handleRemoteCandidate(data) {
+            const candidate = {
+              candidate: data.candidate,
+              sdpMLineIndex: data.label,
+              sdpMid: data.sdpMid
+            }
+            await this.senderPc.addIceCandidate(new RTCIceCandidate(candidate))
+          },
+          _handleNoticeInvite(data) {
+            if (data.status === 'free') {
+              this.dialPeer()
+            } else {
+              let text
+              switch (data.status) {
+                case 'callConflict':
+                  text = '拨打冲突'
+                  break
+                case 'trustSameNumber':
+                  text = '对方托管号码与你号码相同'
+                  break
+                case 'nonExistent':
+                  text = '号码不存在'
+                  break
+              }
+              this.msgContext(text)
+            }
+          },
+          _handleInvite(data) {
+            const index = this.ackIdArray.findIndex((item) => item.fromId === data.fromId)
+            if (index === -1) {
+              this.ackIdArray.push({
+                from: data.from,
+                fromId: data.fromId,
+                displayName: data.displayName,
+                isCalling: false,
+                isCallView: true
+              })
+            }
+          },
+          handleInvite(data) {},
+          async handleOffer(data) {
+            this.chatId = data.chatId
+            if (this.interposeId && data.fromId === this.interposeId) {
+              const index = this.interposeArray.findIndex((item) => item.fromId === data.fromId)
+              if (index === -1) {
+                this.interposeArray.push({
+                  from: data.from,
+                  fromId: data.fromId
+                })
+              }
+            } else {
+              const index = this.ackIdArray.findIndex((item) => item.fromId === data.fromId)
+              if (index === -1) {
+                this.ackIdArray.push({
+                  from: data.from,
+                  fromId: data.fromId,
+                  displayName: data.displayName,
+                  isCalling: false,
+                  isCallView: true
+                })
+              } else {
+                this.ackIdArray[index].isCalling = false
+                this.ackIdArray[index].isCallView = true
+              }
+            }
+            await this.getLocalStream()
+            this.createPeerConnections()
+          },
+          async handleAnswer(data) {
+            await this.senderPc.setRemoteDescription({
+              sdp: data.sdp,
+              type: 'answer'
+            })
+          },
+          handleAck(data) {
+            setTimeout(() => {
+              let text
+              switch (data.status) {
+                case 'busy':
+                  text = '用户忙线'
+                  break
+                case 'noAnswer':
+                  text = '无人接听'
+                  break
+                case 'nonExistent':
+                  text = '号码不存在'
+                  break
+              }
+              this.msgContext(text)
+              this.hangUpCallEnd()
+            }, 1500)
+          },
+          hangUpCallEnd() {
+            this.timerNumber = null
+            if (this.timer) {
+              this.timer.destroy()
+            }
+            this.isCall = false
+            this.callIng = false
+            this.interposeId = null
+            if (this.senderPc) {
+              this.senderPc.close()
+              this.senderPc = null
+            }
+            for (let index in this.ackIdArray) {
+              index = parseInt(index)
+              if (this.ackIdArray[index].receivePC) {
+                this.ackIdArray[index].receivePC.close()
+                const sendClosePeer = {
+                  eventName: '__close_peer',
+                  data: {
+                    macId: this.ackIdArray[index].fromId
+                  }
+                }
+                try {
+                  this.ws.send(JSON.stringify(sendClosePeer))
+                } catch (error) {
+                  console.error(error)
+                }
+                this.ackIdArray[index].receivePC = null
+              }
+            }
+            for (let index in this.interposeArray) {
+              index = parseInt(index)
+              if (this.interposeArray[index].receivePC) {
+                this.interposeArray[index].receivePC.close()
+                const sendClosePeer = {
+                  eventName: '__close_peer',
+                  data: {
+                    macId: this.interposeArray[index].fromId
+                  }
+                }
+                try {
+                  this.ws.send(JSON.stringify(sendClosePeer))
+                } catch (error) {
+                  console.error(error)
+                }
+                this.interposeArray[index].receivePC = null
+              }
+            }
+            this.ackIdArray = []
+            const sendDestroy = {
+              eventName: '__destroy'
+            }
+            if (this.ws) {
+              this.ws.send(JSON.stringify(sendDestroy))
+            }
+          },
+          handleNotice(data) {
+            switch (data.type) {
+              case 'conflict':
+                this.msgContext('操作冲突，请稍后再试')
+                break
+              case 'call_end':
+                for (let item of this.ackIdArray) {
+                  const callEnds = {
+                    eventName: '__call_end',
+                    data: {
+                      toId: item.fromId,
+                      exitEnd: true,
+                      transferCur: null
+                    }
+                  }
+                  this.ws.send(JSON.stringify(callEnds))
+                }
+                setTimeout(() => {
+                  this.hangUpCallEnd()
+                })
+                break
+            }
+          },
+          handleCallEnd(data) {
+            if (data.exitEnd) {
+              this.hangUpCallEnd()
+              if (!this.isLock) {
+                this.msgContext('对方挂断')
+              }
+            } else {
+              if (data.fromId === this.interposeId) {
+                this.interposeId = null
+              }
+              const index = this.ackIdArray.findIndex((item) => item.fromId === data.fromId)
+              if (index !== -1) {
+                if (this.ackIdArray[index].receivePC) {
+                  this.ackIdArray[index].receivePC.close()
+                  this.ackIdArray[index].receivePC = null
+                  const sendClosePeer = {
+                    eventName: '__close_peer',
+                    data: {
+                      macId: this.ackIdArray[index].fromId
+                    }
+                  }
+                  this.ws.send(JSON.stringify(sendClosePeer))
+                }
+                this.ackIdArray.splice(index, 1)
+                setTimeout(() => {
+                  this.resetVideo()
+                })
+              } else {
+                const _index = this.interposeArray.findIndex((item) => item.fromId === data.fromId)
+                if (_index !== -1) {
+                  if (this.interposeArray[_index].receivePC) {
+                    this.interposeArray[_index].receivePC.close()
+                    this.interposeArray[_index].receivePC = null
+                    const sendClosePeer = {
+                      eventName: '__close_peer',
+                      data: {
+                        macId: this.interposeArray[_index].fromId
+                      }
+                    }
+                    this.ws.send(JSON.stringify(sendClosePeer))
+                  }
+                  this.interposeArray.splice(_index, 1)
+                }
+              }
+              if (this.ackIdArray.length !== 0 && !data.isCalling) {
+                const sendCallLock = {
+                  eventName: '__call_lock',
+                  data: {
+                    isCallLock: false
+                  }
+                }
+                this.ws.send(JSON.stringify(sendCallLock))
+              }
+              if (this.ackIdArray.length === 0) {
+                this.hangUpCallEnd()
+                if (!this.isLock) {
+                  this.msgContext('对方挂断')
+                }
+              }
+            }
+          },
+          resetVideo() {
+            this.$nextTick(() => {
+              for (let index in this.ackIdArray) {
+                index = parseInt(index)
+                if (this.$refs[`receiveVideo${index}`]) {
+                  this.$refs[`receiveVideo${index}`].srcObject = this.ackIdArray[index].streams
+                  setTimeout(() => {
+                    if (window.WeixinJSBridge) {
+                      window.WeixinJSBridge.invoke('getNetworkType', {}, (res) => {
+                        this.$refs[`receiveVideo${index}`].play()
+                      })
+                    } else {
+                      this.$refs[`receiveVideo${index}`].play()
+                    }
+                  }, 100)
+                }
+              }
+              if (this.$refs.localVideo && !this.$refs.localVideo.srcObject) {
+                this.$refs.localVideo.srcObject = this.localStream.clone()
+                setTimeout(() => {
+                  if (window.WeixinJSBridge) {
+                    window.WeixinJSBridge.invoke('getNetworkType', {}, (res) => {
+                      this.$refs.localVideo.play()
+                    })
+                  } else {
+                    this.$refs.localVideo.play()
+                  }
+                }, 100)
+              }
+            })
+          },
+          handleOtherUser(data) {
+            const index = this.ackIdArray.findIndex((item) => item.fromId === data.macId)
+            if (index === -1) {
+              this.ackIdArray.push({
+                from: data.number,
+                fromId: data.macId,
+                displayName: data.displayName,
+                isCalling: false,
+                isCallView: true
+              })
+            } else {
+              this.ackIdArray[index].isCalling = false
+              this.ackIdArray[index].isCalling = true
+            }
+            // this.getLocalStream(data.macId)
+            this.receiverCreatePeerConnection(data.macId)
+          },
+          handleActiveReceiverCall(data) {
+            this.receiverCreatePeerConnection(data.macId)
+          },
+          handleHeartbeat() {
+            const sendHeartbeat = {
+              eventName: '__heartbeat'
+            }
+            this.ws.send(JSON.stringify(sendHeartbeat))
+          },
+          handleThreeOffer(data) {
+            if (data.status === 'mergeCall') {
+              this.chatId = data.chatId
+              for (let item of data.mergeIdArray) {
+                if (item.fromId !== this.uuid) {
+                  const index = this.ackIdArray.findIndex((_item) => _item.fromId === item.fromId)
+                  if (index === -1) {
+                    item.isCalling = false
+                    item.isCallView = true
+                    this.ackIdArray.push(item)
+                  }
+                }
+              }
+              for (let item of this.ackIdArray) {
+                const sendOfferCall = {
+                  eventName: '__offer',
+                  data: {
+                    toId: item.fromId,
+                    chatId: this.chatId,
+                    videoEnable: 1,
+                    isReceiver: false,
+                    enableMerge: false
+                  }
+                }
+                this.ws.send(JSON.stringify(sendOfferCall))
+              }
+              this.getLocalStream(this.ackIdArray[0].fromId)
+            }
+          },
+          handleTransfer(data) {
+            if (data.status === 'transferInvite') {
+              this.ackIdArray = []
+              this.toNumber = data.to
+              this.dialPeer()
+            } else if (data.status === 'setTransfer') {
+              if (data.isTransfer) {
+                const index = this.ackIdArray.findIndex((item) => item.fromId === data.transferId)
+                if (index === -1) {
+                  this.ackIdArray.push({
+                    from: data.transferNumber,
+                    fromId: data.transferId,
+                    displayName: data.displayName,
+                    isCalling: false,
+                    isCallView: true
+                  })
+                }
+              } else {
+                const index = this.ackIdArray.findIndex((item) => item.fromId === data.transferId)
+                this.ackIdArray.splice(index, 1)
+              }
+            }
+          },
+          handleCallViewShowHide(data) {
+            for (const ack of this.ackIdArray) {
+              if (ack.fromId === data.fromId) {
+                ack.isCallView = !data.isCallView
+              }
+            }
+          },
+          handleSetInterpose(data) {
+            this.interposeId = data.interposeId
+          },
+          async getLocalStream(macId) {
+            if (this.localStream) {
+              this.callIng = true
+              this.$nextTick(() => {
+                if (!this.$refs.localVideo.srcObject) {
+                  this.$refs.localVideo.srcObject = this.localStream.clone()
+                  setTimeout(() => {
+                    if (window.WeixinJSBridge) {
+                      window.WeixinJSBridge.invoke('getNetworkType', {}, (res) => {
+                        this.$refs.localVideo.play()
+                      })
+                    } else {
+                      this.$refs.localVideo.play()
+                    }
+                  }, 100)
+                }
+              })
+              this.createSenderPeerConnection(macId)
+            }
+          },
+          createPeerConnections() {
+            for (let index in this.ackIdArray) {
+              this.createReceiverPeerConnection(parseInt(index))
+            }
+            if (this.interposeId) {
+              for (let index in this.interposeArray) {
+                this.createInterposeReceiverPeerConnection(parseInt(index))
+              }
+            }
+          },
+          receiverCreatePeerConnection(macId) {
+            const index = this.ackIdArray.findIndex((item) => item.fromId === macId)
+            this.createReceiverPeerConnection(index)
+          },
+          senderOnicecandidate(e) {
+            if (e.candidate && e.candidate.candidate) {
+              const senderIceCandidate = {
+                eventName: '__ice_candidate',
+                data: {
+                  candidate: {
+                    sdp: e.candidate.candidate,
+                    sdpMLineIndex: e.candidate.sdpMLineIndex,
+                    sdpMid: e.candidate.sdpMid
+                  }
+                }
+              }
+              this.ws.send(JSON.stringify(senderIceCandidate))
+            }
+          },
+          async createSenderPeerConnection(macId) {
+            if (!this.senderPc) {
+              this.senderPc = new RTCPeerConnection(this.pc_config)
+              this.senderPc.onicecandidate = this.senderOnicecandidate
+              const { close } = this.senderPc
+              let that = this
+              this.senderPc.close = function () {
+                that.senderPc.removeEventListener('onicecandidate', that.senderOnicecandidate)
+                return close.apply(this, arguments)
+              }
+              if (this.localStream) {
+                const _stream = this.localStream.clone()
+                _stream.getTracks().forEach((track) => {
+                  this.senderPc.addTrack(track, _stream)
+                })
+              }
+              const sdp = await this.senderPc.createOffer({
+                offerToReceiveAudio: false,
+                offerToReceiveVideo: false
+              })
+              sdp.sdp = window.codex.preferCodec(sdp.sdp, 'h264')
+              sdp.sdp = window.codex.setBitrate(
+                'H264',
+                true,
+                sdp.sdp,
+                this.videoStartBitrateKbps,
+                this.videoMinBitrateKbps,
+                this.videoMaxBitrateKbps
+              )
+              sdp.sdp = window.codex.setBitrate(
+                'opus',
+                false,
+                sdp.sdp,
+                this.audioStartBitrate,
+                null,
+                null,
+                this.audioStereo
+              )
+              await this.senderPc.setLocalDescription(new RTCSessionDescription(sdp))
+              const senderOffer = {
+                eventName: '__sender_offer',
+                data: {
+                  videoEnable: 1,
+                  sdp: sdp.sdp,
+                  macId: macId,
+                  videoStartBitrateKbps: this.videoStartBitrateKbps,
+                  videoMinBitrateKbps: this.videoMinBitrateKbps,
+                  videoMaxBitrateKbps: this.videoMaxBitrateKbps,
+                  audioStartBitrate: this.audioStartBitrate,
+                  audioStereo: this.audioStereo
+                }
+              }
+              this.ws.send(JSON.stringify(senderOffer))
+            }
+          },
+          getDeviceType() {
+            const u = navigator.userAgent
+            if (
+              !!u.match(/\(i[^;]+;( U;)? CPU.+Mac OS X/) ||
+              u.indexOf('iPhone') > -1 ||
+              u.indexOf('iPad') > -1
+            ) {
+              return true
+            } else {
+              return false
+            }
+          },
+          async createReceiverPeerConnection(index) {
+            if (!this.ackIdArray[index].receivePC) {
+              this.ackIdArray[index].receivePC = new RTCPeerConnection(this.pc_config)
+              if (this.localStream && this.getDeviceType()) {
+                const _stream = this.localStream.clone()
+                _stream.getTracks().forEach((track) => {
+                  this.ackIdArray[index].receivePC.addTrack(track, _stream)
+                })
+              }
+              let that = this
+              function receiveOnicecandidate(e) {
+                if (e.candidate && e.candidate.candidate) {
+                  const receiverIceCandidate = {
+                    eventName: '__receiver_ice_candidate',
+                    data: {
+                      macId: that.ackIdArray[index].fromId,
+                      candidate: {
+                        sdp: e.candidate.candidate,
+                        sdpMLineIndex: e.candidate.sdpMLineIndex,
+                        sdpMid: e.candidate.sdpMid
+                      }
+                    }
+                  }
+                  that.ws.send(JSON.stringify(receiverIceCandidate))
+                }
+              }
+              function receiveOntrack(e) {
+                that.$nextTick(() => {
+                  that.ackIdArray[index].streams = e.streams[0]
+                  that.$refs[`receiveVideo${index}`].srcObject = that.ackIdArray[index].streams
+                  setTimeout(() => {
+                    if (window.WeixinJSBridge) {
+                      window.WeixinJSBridge.invoke('getNetworkType', {}, (res) => {
+                        that.$refs[`receiveVideo${index}`].play()
+                      })
+                    } else {
+                      that.$refs[`receiveVideo${index}`].play()
+                    }
+                  }, 100)
+                })
+              }
+              this.ackIdArray[index].receivePC.onicecandidate = receiveOnicecandidate
+              this.ackIdArray[index].receivePC.ontrack = receiveOntrack
+              const sdp = await this.ackIdArray[index].receivePC.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+              })
+              sdp.sdp = window.codex.preferCodec(sdp.sdp, 'h264')
+              sdp.sdp = window.codex.setBitrate(
+                'H264',
+                true,
+                sdp.sdp,
+                this.videoStartBitrateKbps,
+                this.videoMinBitrateKbps,
+                this.videoMaxBitrateKbps
+              )
+              sdp.sdp = window.codex.setBitrate(
+                'opus',
+                false,
+                sdp.sdp,
+                this.audioStartBitrate,
+                null,
+                null,
+                this.audioStereo
+              )
+              await this.ackIdArray[index].receivePC.setLocalDescription(
+                new RTCSessionDescription(sdp)
+              )
+              const receiveOffer = {
+                eventName: '__receiver_offer',
+                data: {
+                  videoEnable: 1,
+                  macId: this.ackIdArray[index].fromId,
+                  sdp: sdp.sdp,
+                  videoStartBitrateKbps: this.videoStartBitrateKbps,
+                  videoMinBitrateKbps: this.videoMinBitrateKbps,
+                  videoMaxBitrateKbps: this.videoMaxBitrateKbps,
+                  audioStartBitrate: this.audioStartBitrate,
+                  audioStereo: this.audioStereo
+                }
+              }
+              this.ws.send(JSON.stringify(receiveOffer))
+            }
+          },
+          async createInterposeReceiverPeerConnection(index) {
+            if (!this.interposeArray[index].receivePC) {
+              this.interposeArray[index].receivePC = new RTCPeerConnection(this.pc_config)
+              if (this.localStream) {
+                const _stream = this.localStream.clone()
+                _stream.getTracks().forEach((track) => {
+                  this.interposeArray[index].receivePC.addTrack(track, _stream)
+                })
+              }
+              let that = this
+              function receiveOnicecandidate(e) {
+                if (e.candidate && e.candidate.candidate) {
+                  const receiverIceCandidate = {
+                    eventName: '__receiver_ice_candidate',
+                    data: {
+                      macId: that.interposeArray[index].fromId,
+                      candidate: {
+                        sdp: e.candidate.candidate,
+                        sdpMLineIndex: e.candidate.sdpMLineIndex,
+                        sdpMid: e.candidate.sdpMid
+                      }
+                    }
+                  }
+                  that.ws.send(JSON.stringify(receiverIceCandidate))
+                }
+              }
+              function receiveOntrack(e) {
+                that.$nextTick(() => {
+                  that.interposeArray[index].streams = e.streams[0]
+                  that.$refs[`receiveInterposeVideo${index}`][0].srcObject =
+                    that.interposeArray[index].streams
+                  setTimeout(() => {
+                    if (window.WeixinJSBridge) {
+                      window.WeixinJSBridge.invoke('getNetworkType', {}, (res) => {
+                        that.$refs[`receiveInterposeVideo${index}`][0].play()
+                      })
+                    } else {
+                      that.$refs[`receiveInterposeVideo${index}`][0].play()
+                    }
+                  }, 100)
+                })
+              }
+              this.interposeArray[index].receivePC.onicecandidate = receiveOnicecandidate
+              this.interposeArray[index].receivePC.ontrack = receiveOntrack
+              const sdp = await this.interposeArray[index].receivePC.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+              })
+              sdp.sdp = window.codex.preferCodec(sdp.sdp, 'h264')
+              sdp.sdp = window.codex.setBitrate(
+                'H264',
+                true,
+                sdp.sdp,
+                this.videoStartBitrateKbps,
+                this.videoMinBitrateKbps,
+                this.videoMaxBitrateKbps
+              )
+              sdp.sdp = window.codex.setBitrate(
+                'opus',
+                false,
+                sdp.sdp,
+                this.audioStartBitrate,
+                null,
+                null,
+                this.audioStereo
+              )
+              await this.interposeArray[index].receivePC.setLocalDescription(
+                new RTCSessionDescription(sdp)
+              )
+              const receiveOffer = {
+                eventName: '__receiver_offer',
+                data: {
+                  videoEnable: 1,
+                  macId: this.interposeArray[index].fromId,
+                  sdp: sdp.sdp,
+                  videoStartBitrateKbps: this.videoStartBitrateKbps,
+                  videoMinBitrateKbps: this.videoMinBitrateKbps,
+                  videoMaxBitrateKbps: this.videoMaxBitrateKbps,
+                  audioStartBitrate: this.audioStartBitrate,
+                  audioStereo: this.audioStereo
+                }
+              }
+              this.ws.send(JSON.stringify(receiveOffer))
+            }
+          },
+          clientWs() {
+            try {
+              this.uuid =
+                Math.floor(
+                  (Math.random() + Math.floor(Math.random() * 9 + 1)) * Math.pow(10, 10 - 1)
+                ) + +new Date()
+              this.ws = new ReconnectingWebSocket(
+                `wss://rtc.chindeo.com/websocket?user=Chindeo&password=P@ssw0rd&mac=${this.uuid}&number=${this.uuid}&displayName=远程探视用户&deviceType=${this.type}&transferNum=`
+              )
+              this.ws.onopen = (e) => {
+                console.log('连接服务器成功')
+                this.isClient = true
+              }
+              this.ws.onclose = (e) => {
+                console.log('服务器关闭')
+                this.hangUpCallEnd()
+                this.isClient = false
+                this.isLock = false
+              }
+              this.ws.onerror = () => {
+                console.log('连接出错')
+                this.isClient = false
+              }
+              // 接收服务器的消息
+              this.ws.onmessage = (e) => {
+                console.error("接收服务器的消息:",e)
+                let message = JSON.parse(e.data)
+                 console.error("message:",message.eventName,message.data)
+                if (message.eventName === '_receiver_answer') {
+                  this.handleReceiverAnswer(message.data)
+                } else if (message.eventName === '_receiver_ice_candidate') {
+                  this.handleReceiverRemoteCandidate(message.data)
+                } else if (message.eventName === '_notice_invite') {
+                  this._handleNoticeInvite(message.data)
+                } else if (message.eventName === '_handle_invite') {
+                  this._handleInvite(message.data)
+                } else if (message.eventName === '_invite') {
+                  this.handleInvite(message.data)
+                } else if (message.eventName === '_offer') {
+                  this.handleOffer(message.data)
+                } else if (message.eventName === '_answer') {
+                  this.handleAnswer(message.data)
+                } else if (message.eventName === '_ice_candidate') {
+                  this.handleRemoteCandidate(message.data)
+                } else if (message.eventName === '_ack') {
+                  this.handleAck(message.data)
+                } else if (message.eventName === '_notice') {
+                  this.handleNotice(message.data)
+                } else if (message.eventName === '_call_end') {
+                  this.handleCallEnd(message.data)
+                } else if (message.eventName === '_other_user') {
+                  this.handleOtherUser(message.data)
+                } else if (message.eventName === '_active_receiver_call') {
+                  this.handleActiveReceiverCall(message.data)
+                } else if (message.eventName === '_heartbeat') {
+                  this.handleHeartbeat()
+                } else if (message.eventName === '_three_offer') {
+                  this.handleThreeOffer(message.data)
+                } else if (message.eventName === '_transfer') {
+                  this.handleTransfer(message.data)
+                } else if (message.eventName === '_call_view_show_hide') {
+                  this.handleCallViewShowHide(message.data)
+                } else if (message.eventName === '_set_interpose') {
+                  this.handleSetInterpose(message.data)
+                }
+              }
+            } catch (error) {
+              console.error("clientWs:",error)
+
+            }
+          },
+          async getDomain() {
+            const response = await fetch('https://rtc.chindeo.com/rtc/app/domain')
+            const res = await response.json()
+            if (res.data && res.data.domain) {
+              this.domain = res.data.domain
+            }
+          },
+          async getAuth() {
+            try {
+              if (navigator.mediaDevices) {
+                this.noSupport = true
+
+                this.localStream = await navigator.mediaDevices
+                  .getUserMedia({
+                    video: true,
+                    audio: true
+                  })
+                  .catch( (error) => {
+                    //this.noSupport = false
+                    // this.localStream = await navigator.mediaDevices.getDisplayMedia({
+                    // video: true,
+                    // audio: true,
+                    // })
+                    // this.myVideo.srcObject = this.mediaStream
+                    // this.mediaRecord = new MediaRecorder(this.mediaStream, {
+                    //   audioBitsPerSecond: 128000,
+                    //   videoBitsPerSecond: 2500000,
+                    //   mimeType: 'video/webm;codecs=vp9'
+                    // })
+                    // this.mediaRecord.ondataavailable = function (e) {
+                    //   if (e.data.size > 0) {
+                    //     this.videoBuffer.push(e.data)
+                    //     // this.$refs.downloadButton.removeAttribute('disabled')
+                    //   }
+                    // }
+                  })
+                this.isAuth = true
+                this.clientWs()
+                console.log("isAuth:", this.isAuth)
+                console.log("noSupport:", this.noSupport)
+              } else {
+                this.noSupport = false
+              }
+            } catch (error) {
+
+              this.isAuth = false
+            }
+          },
+          hasClass(elem, cls) {
+            cls = cls || ''
+            if (cls.replace(/\s/g, '').length == 0) return false
+            return new RegExp(' ' + cls + ' ').test(' ' + elem.className + ' ')
+          }
+        },
+        async mounted() {
+          document.querySelector('#app').style.display = 'block'
+          this.locationHref = location.href
+
+          this.remoteDeviceDetail = JSON.parse(unescape(this.GetQueryString('remoteDeviceDetail')))
+          console.log(this.remoteDeviceDetail)
+          if (this.remoteDeviceDetail && this.remoteDeviceDetail.sip_users_name) {
+            this.remoteNumber = this.remoteDeviceDetail.bind_sip_users_name
+            this.transferNumber = this.remoteDeviceDetail.sip_users_name
+          }
+
+          var iceServer = this.GetQueryString('iceServer')
+          if (iceServer && iceServer !== '47.112.22.152') {
+            this.pc_config.iceServers = [
+              {
+                urls: [`stun:${iceServer}:3478`]
+              },
+              {
+                username: 'Chindeo',
+                credential: 'P@ssw0rd',
+                urls: [`turn:${iceServer}:3478?transport=udp`]
+              },
+              {
+                username: 'Chindeo',
+                credential: 'P@ssw0rd',
+                urls: [`turn:${iceServer}:3478?transport=tcp`]
+              }
+            ]
+
+            console.log("pc_config:",this.pc_config)
+          }
+
+          await this.getDomain()
+          this.getAuth()
+          window.addEventListener('touchstart', (event) => {
+            if (this.isCall) {
+              if (
+                !this.hasClass(event.target, 'icon_refuse') &&
+                !this.hasClass(event.target, 'van-dialog__cancel') &&
+                !this.hasClass(event.target, 'van-dialog__message') &&
+                !this.hasClass(event.target, 'van-overlay')
+              ) {
+                this.isShowCallEnd = !this.isShowCallEnd
+                if (this.isShowCallEnd) {
+                  clearTimeout(this.showCallEndTimeout)
+                  this.showCallEndTimeout = setTimeout(() => {
+                    this.isShowCallEnd = false
+                  }, 10000)
+                }
+              }
+            }
+          })
+        }
+      })
+    </script>
+  </body>
+</html>
