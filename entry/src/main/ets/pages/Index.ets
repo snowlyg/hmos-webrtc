@@ -23,7 +23,7 @@ import { abilityAccessCtrl } from '@kit.AbilityKit';
 @Component
 struct Index {
   @Provide('NavPathStack') pageStack: NavPathStack = new NavPathStack();
-  @State pageTitle: string = getContext(this).resourceManager.getStringSync($r('app.string.mobile_phone_recharge'));
+  @State pageTitle: string = getContext(this).resourceManager.getStringSync($r('app.string.index_title'));
 
   // @Builder
   // PagesMap(name: string) {
@@ -63,14 +63,14 @@ struct Index {
   build() {
     Navigation(this.pageStack) {
       Column() {
-        Text($r('app.string.select_contact'))
-          .width('100%')
-          .fontColor('#E6000000')
-          .fontSize(30)
-          .fontWeight(700)
-          .lineHeight(40)
-          .textAlign(TextAlign.Start)
-          .margin({ top: 64 })
+        // Text($r('app.string.index_title'))
+        //   .width('100%')
+        //   .fontColor('#E6000000')
+        //   .fontSize(30)
+        //   .fontWeight(700)
+        //   .lineHeight(40)
+        //   .textAlign(TextAlign.Start)
+        //   .margin({ top: 64 })
 
         Blank()
 

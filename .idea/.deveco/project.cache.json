@@ -7,7 +7,7 @@
 	},
 	"BuildOptions":{
 		"SELECT_BUILD_PRODUCT":"default",
-		"BUNDLE_NAME":"com.chindeo.selectcontact",
+		"BUNDLE_NAME":"com.chindeo.webrtc",
 		"BUILD_PATH":{
 			"OUTPUT_PATH":"F:\\hmos\\build\\outputs\\default"
 		},

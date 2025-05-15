@@ -1,9 +1,9 @@
 {
   "app": {
-    "bundleName": "com.chindeo.selectcontact",
-    "vendor": "example",
+    "bundleName": "com.chindeo.webrtc",
+    "vendor": "chindeo",
     "versionCode": 1000000,
-    "versionName": "1.0.0",
+    "versionName": "0.0.1",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }
